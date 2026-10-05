@@ -8,6 +8,7 @@ function AuthCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<any>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -15,19 +16,29 @@ function AuthCallbackInner() {
       try {
         const supabase = createClient();
         
-        // 1. If Supabase sent a PKCE code, we must explicitly exchange it
         const code = searchParams.get('code');
-        if (code) {
-          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeErr) throw exchangeErr;
+        const errParam = searchParams.get('error');
+        const errDesc = searchParams.get('error_description');
+        
+        if (errParam) {
+           throw new Error(OAuth Error:  - );
         }
 
-        // 2. Fetch the session. If it's an implicit flow (#access_token), 
-        // Supabase might take a split second to parse it.
+        let step = "Initial";
+        if (code) {
+          step = "Exchanging code...";
+          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeErr) {
+             setDebugInfo({ exchangeErr });
+             throw exchangeErr;
+          }
+        }
+
+        step = "Getting session...";
         let { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (!session) {
-          // Wait briefly for the auth state listener to catch the hash fragment
+          step = "Waiting for hash fragment...";
           session = await new Promise((resolve) => {
             const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
               if (newSession) {
@@ -35,7 +46,6 @@ function AuthCallbackInner() {
                 resolve(newSession);
               }
             });
-            // Timeout after 2.5 seconds
             setTimeout(() => {
               subscription.unsubscribe();
               resolve(null);
@@ -44,12 +54,13 @@ function AuthCallbackInner() {
         }
 
         if (!session) {
-          throw new Error("No active session found. Please try logging in again.");
+          setDebugInfo({ url: window.location.href, code });
+          throw new Error("No active session found. Supabase did not return a session.");
         }
 
         const role = searchParams.get('role') || 'family';
 
-        // 3. Call our secure backend to sync the profile (superadmin, staff invites, etc)
+        step = "Syncing profile on server...";
         const res = await fetch('/api/auth/sync-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -58,12 +69,12 @@ function AuthCallbackInner() {
 
         if (!res.ok) {
           const errData = await res.json();
+          setDebugInfo({ syncErr: errData });
           throw new Error(errData.error || "Failed to sync profile");
         }
 
         const { redirectUrl } = await res.json();
         
-        // Redirect to the correct dashboard
         if (isMounted) {
           router.push(redirectUrl);
         }
@@ -80,14 +91,15 @@ function AuthCallbackInner() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="p-8 max-w-md w-full bg-white rounded-2xl shadow-sm text-center border border-red-100">
-          <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
+        <div className="p-8 max-w-2xl w-full bg-white rounded-2xl shadow-sm text-center border border-red-100">
           <h2 className="text-xl font-bold text-gray-900 mb-2">Authentication Error</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <p className="text-red-600 mb-6 font-semibold">{error}</p>
+          
+          <div className="bg-gray-100 p-4 rounded text-left text-xs text-gray-700 font-mono mb-6 overflow-auto">
+             <p>Debug Info:</p>
+             <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+          </div>
+
           <button 
             onClick={() => router.push('/login')}
             className="w-full bg-navy text-white rounded-xl py-3 font-semibold hover:bg-navy/90 transition-colors"
@@ -109,12 +121,7 @@ function AuthCallbackInner() {
 
 export default function AuthCallback() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex flex-col items-center justify-center bg-surface">
-        <div className="w-12 h-12 border-4 border-navy/20 border-t-navy rounded-full animate-spin mb-4" />
-        <p className="text-text-muted font-medium animate-pulse">Loading...</p>
-      </div>
-    }>
+    <Suspense fallback={<div />}>
       <AuthCallbackInner />
     </Suspense>
   );
