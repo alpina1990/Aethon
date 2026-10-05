@@ -38,9 +38,7 @@ export async function GET() {
 
     // 3. Fetch pending invites (ONLY for this facility)
     const { data: pendingInvites } = await supabaseAdmin
-      .from('staff_invitations')
-      .select('id, email, role, created_at')
-      .eq('facility_id', profile.facility_id);
+      .from('invite_codes').select('*').in('kind', ['admin', 'staff', 'caregiver']).eq('facility_id', profile.facility_id);
 
     return NextResponse.json({ 
       active: activeStaff || [],
@@ -115,3 +113,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
