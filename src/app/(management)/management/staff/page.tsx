@@ -103,16 +103,16 @@ export default function StaffPage() {
     <div className="space-y-8 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Staff & Caregivers</h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Manage web access and tablet login credentials for your nursing staff.</p>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Staff & Caregivers</h2>
+          <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 mt-1">Manage web access and tablet login credentials for your nursing staff.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full md:w-auto items-center gap-2 md:gap-3">
           <button
             onClick={() => {
               setGeneratedCreds(null);
               setIsProvisionModalOpen(true);
             }}
-            className="flex items-center gap-2 bg-white dark:bg-zinc-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-zinc-800 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm text-sm font-bold"
+            className="flex-1 md:flex-none justify-center flex items-center gap-2 bg-white dark:bg-zinc-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-zinc-800 px-4 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors shadow-sm text-sm font-bold"
           >
             <KeyRound className="h-4 w-4" />
             <span>Tablet PIN</span>
@@ -122,7 +122,7 @@ export default function StaffPage() {
               setGeneratedInviteCode(null);
               setIsInviteModalOpen(true);
             }}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold"
+            className="flex-1 md:flex-none justify-center flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm text-sm font-bold"
           >
             <Mail className="h-4 w-4" />
             <span>Invite via Email</span>
@@ -163,7 +163,7 @@ export default function StaffPage() {
                     staff.map((member) => (
                       <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
+                          <div className="flex w-full md:w-auto items-center gap-2 md:gap-3">
                             <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-slate-600 dark:text-zinc-300 uppercase shrink-0">
                               {member.full_name?.substring(0, 2) || 'ST'}
                             </div>
@@ -417,3 +417,4 @@ export default function StaffPage() {
     </div>
   );
 }
+
