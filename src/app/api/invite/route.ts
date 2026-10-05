@@ -1,23 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
-    const { email, residentId, residentName } = await request.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { email, residentId } = await request.json();
 
     if (!email || !residentId) {
       return NextResponse.json({ error: 'Email and Resident ID are required' }, { status: 400 });
-    }
-
-    const supabase = await createClient();
-
-    // 1. Verify user is authenticated
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data: profile } = await supabase
@@ -30,81 +28,63 @@ export async function POST(request: Request) {
        return NextResponse.json({ error: 'User not attached to a facility' }, { status: 400 });
     }
 
-    // Insert into Supabase
+    const { data: resident } = await supabase
+      .from('residents')
+      .select('first_name, last_name')
+      .eq('id', residentId)
+      .single();
+
+    // Generate a 6-digit uppercase alphanumeric code
+    const code = crypto.randomBytes(3).toString('hex').toUpperCase();
+
+    // Insert into the new iOS-compatible invite_codes table
     const { error: dbError } = await supabase
-      .from('family_invitations')
+      .from('invite_codes')
       .insert([
         {
-          email: email.trim(),
+          code: code,
+          kind: 'family',
           resident_id: residentId,
-          facility_id: profile.facility_id
+          facility_id: profile.facility_id,
+          created_by: user.id,
+          max_uses: 1,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
         }
       ]);
 
-    if (dbError) {
-      // Ignore unique constraint if we are just resending
-      if (dbError.code !== '23505') { 
-         console.error('DB Error:', dbError);
-         return NextResponse.json({ error: 'Failed to save invitation' }, { status: 500 });
-      }
+    if (dbError) throw dbError;
+
+    // Send the email via Resend
+    if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: 'Aethon Health <invites@resend.dev>',
+        to: email.trim(),
+        subject: You have been invited to Aethon Health,
+        html: 
+          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; text-align: center;">
+            <div style="background-color: #0ea5e9; padding: 12px; border-radius: 50%; width: 48px; height: 48px; margin: 0 auto 24px;">
+              <svg fill="none" stroke="white" viewBox="0 0 24 24" style="width: 24px; height: 24px; margin-top: 12px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+            </div>
+            <h1 style="color: #0f172a; margin-bottom: 8px;">Aethon Family Invite</h1>
+            <p style="color: #64748b; font-size: 16px; margin-bottom: 32px;">You have been invited to follow 's care updates.</p>
+            
+            <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
+              <p style="color: #475569; font-size: 14px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; margin-top: 0;">Your Invite Code</p>
+              <div style="font-size: 36px; font-weight: 900; color: #0f172a; letter-spacing: 4px;"></div>
+            </div>
+
+            <p style="color: #64748b; font-size: 14px;">1. Go to <a href="" style="color: #0ea5e9;"></a></p>
+            <p style="color: #64748b; font-size: 14px;">2. Sign in with Google using this email address</p>
+            <p style="color: #64748b; font-size: 14px;">3. Enter your 6-digit code</p>
+          </div>
+        
+      });
     }
 
-    const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://aethon-amber.vercel.app'}/login`;
-
-    // 2. Create a beautiful HTML email template
-    const htmlEmail = `
-      <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-        <div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0;">
-          <h1 style="color: #0f172a; margin-bottom: 0;">Aethon<span style="color: #0284c7; font-weight: 300;">Health</span></h1>
-        </div>
-        
-        <div style="padding: 30px 0; color: #334155; line-height: 1.6;">
-          <h2 style="color: #0f172a; font-size: 20px;">You've been invited to the Family Portal</h2>
-          <p>Hello,</p>
-          <p>You have been invited by the care team to access the Aethon Health Family Portal for <strong>${residentName || 'your loved one'}</strong>.</p>
-          <p>Through the portal, you will be able to:</p>
-          <ul style="color: #475569;">
-            <li>View daily care updates and timelines</li>
-            <li>Monitor real-time health vitals and trends</li>
-            <li>Message the care team directly</li>
-          </ul>
-          
-          <div style="text-align: center; margin: 40px 0;">
-            <a href="${loginUrl}" style="background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
-              Access Family Portal
-            </a>
-          </div>
-          
-          <p style="font-size: 14px; color: #64748b;">
-            To sign in, please click the button above and select "Sign in with Google" using this email address (<strong>${email}</strong>).
-          </p>
-        </div>
-        
-        <div style="padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;">
-          <p>Built with Swiss Precision. Securely hosted in Switzerland.</p>
-          <p>© ${new Date().getFullYear()} Alpina Health / Aethon Health</p>
-        </div>
-      </div>
-    `;
-
-    // 3. Send the email using Resend (DISABLED FOR NOW)
-    // const { data, error: sendError } = await resend.emails.send({
-    //   from: 'Aethon Health <onboarding@resend.dev>',
-    //   to: email,
-    //   subject: `Invitation to view care updates for ${residentName || 'your loved one'}`,
-    //   html: htmlEmail,
-    // });
-    
-    // if (sendError) {
-    //   console.error('Resend Error:', sendError);
-    //   return NextResponse.json({ error: sendError.message }, { status: 500 });
-    // }
-
-    // Mock success since email sending is disabled
-    return NextResponse.json({ success: true, data: { id: 'mock-id' } });
-
+    return NextResponse.json({ success: true, code });
   } catch (error: any) {
-    console.error('Email send error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to send email' }, { status: 500 });
+    console.error('Invite error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
