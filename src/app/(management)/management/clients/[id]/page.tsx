@@ -203,21 +203,45 @@ export default function ClientProfilePage() {
 
   const handleRevokeAccess = async (userId: string) => {
     setRevokingId(userId);
-    await supabase
-      .from('user_profiles').update({ resident_id: null }).eq('id', userId);
-    await fetchProfile();
-    setRevokingId(null);
-    setConfirmAction(null);
-  };
+    try {
+      const res = await fetch('/api/revoke-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, residentId })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error);
+      }
+      await fetchProfile();
+    } catch (err: any) {
+      alert('Failed to revoke access: ' + err.message);
+    } finally {
+      setRevokingId(null);
+      setConfirmAction(null);
+    }
+  };;
 
   const handleCancelInvite = async (code: string) => {
     setCancelingEmail(code);
-    await supabase
-      .from('invite_codes').delete().eq('resident_id', residentId).eq('code', code);
-    await fetchProfile();
-    setCancelingEmail(null);
-    setConfirmAction(null);
-  };
+    try {
+      const res = await fetch('/api/invite-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, residentId })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error);
+      }
+      await fetchProfile();
+    } catch (err: any) {
+      alert('Failed to cancel invite: ' + err.message);
+    } finally {
+      setCancelingEmail(null);
+      setConfirmAction(null);
+    }
+  };;
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1118,6 +1142,8 @@ export default function ClientProfilePage() {
     </>
   );
 }
+
+
 
 
 
