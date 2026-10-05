@@ -99,8 +99,7 @@ export async function POST(req: Request) {
       full_name,
       role: role || 'caregiver',
       facility_id: profile.facility_id,
-      nurse_id: nurseId,
-      pin_change_required: true
+      nurse_id: nurseId
     });
 
     if (profileErr) throw profileErr;
