@@ -210,7 +210,7 @@ export default function ClientProfilePage() {
     setConfirmAction(null);
   };
 
-  const handleCancelInvite = async (email: string) => {
+  const handleCancelInvite = async (code: string) => {
     setCancelingEmail(code);
     await supabase
       .from('invite_codes').delete().eq('resident_id', residentId).eq('code', code);
@@ -1118,6 +1118,7 @@ export default function ClientProfilePage() {
     </>
   );
 }
+
 
 
 
