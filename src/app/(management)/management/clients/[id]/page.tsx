@@ -108,32 +108,23 @@ export default function ClientProfilePage() {
 
     // 4. Fetch real pending invites from the database
     const { data: invites } = await supabase
-      .from('family_invitations')
-      .select('*')
-      .eq('resident_id', residentId);
+      .from('invite_codes').select('*').eq('resident_id', residentId).eq('kind', 'family');
     if (invites) {
-      setPendingInvites(invites.map(i => i.email));
+      setPendingInvites(invites.filter(i => i.used_count < i.max_uses).map(i => i.code));
     }
 
-    // 5. Fetch ACTIVE family members
-    const { data: accessData } = await supabase
-      .from('family_access')
-      .select('user_id')
-      .eq('resident_id', residentId);
-    
-    if (accessData && accessData.length > 0) {
-      const userIds = accessData.map(a => a.user_id);
+    // 5. Fetch ACTIVE family members directly from user_profiles
       const { data: profiles } = await supabase
         .from('user_profiles')
-        .select('id, full_name')
-        .in('id', userIds);
-        
+        .select('id, full_name, role')
+        .eq('resident_id', residentId)
+        .eq('role', 'family');
+      
       if (profiles) {
         setActiveFamily(profiles);
+      } else {
+        setActiveFamily([]);
       }
-    } else {
-      setActiveFamily([]);
-    }
 
     setLoading(false);
   };
@@ -213,22 +204,16 @@ export default function ClientProfilePage() {
   const handleRevokeAccess = async (userId: string) => {
     setRevokingId(userId);
     await supabase
-      .from('family_access')
-      .delete()
-      .eq('resident_id', residentId)
-      .eq('user_id', userId);
+      .from('user_profiles').update({ resident_id: null }).eq('id', userId);
     await fetchProfile();
     setRevokingId(null);
     setConfirmAction(null);
   };
 
   const handleCancelInvite = async (email: string) => {
-    setCancelingEmail(email);
+    setCancelingEmail(code);
     await supabase
-      .from('family_invitations')
-      .delete()
-      .eq('resident_id', residentId)
-      .eq('email', email);
+      .from('invite_codes').delete().eq('resident_id', residentId).eq('code', code);
     await fetchProfile();
     setCancelingEmail(null);
     setConfirmAction(null);
@@ -349,8 +334,8 @@ export default function ClientProfilePage() {
     await supabase.from('medications').delete().eq('resident_id', residentId);
     await supabase.from('visit_notes').delete().eq('resident_id', residentId);
     await supabase.from('escalations').delete().eq('resident_id', residentId);
-    await supabase.from('family_access').delete().eq('resident_id', residentId);
-    await supabase.from('family_invitations').delete().eq('resident_id', residentId);
+    await supabase.from('user_profiles').update({ resident_id: null }).eq('resident_id', residentId);
+    await supabase.from('invite_codes').delete().eq('resident_id', residentId);
     await supabase.from('messages').delete().eq('resident_id', residentId);
 
     // 2. Delete the resident
@@ -1133,5 +1118,11 @@ export default function ClientProfilePage() {
     </>
   );
 }
+
+
+
+
+
+
 
 
