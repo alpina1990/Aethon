@@ -7,7 +7,7 @@ import { FamilyOnboarding } from "@/components/family/FamilyOnboarding";
 import Link from "next/link";
 
 export default function FamilyDashboard() {
-  const { residentInfo, loading } = useFamilyResident();
+  const { residentInfo, loading, hasNoInvite } = useFamilyResident();
   const today = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   if (loading) return (
@@ -22,6 +22,28 @@ export default function FamilyDashboard() {
       </main>
     </div>
   );
+
+  if (hasNoInvite) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mb-6">
+          <Heart className="w-10 h-10 text-rose-500" />
+        </div>
+        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mb-3">
+          No Active Invitation
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 max-w-sm mb-8 leading-relaxed">
+          Sorry, your account hasn't been linked to a resident yet. Please ask the care facility to send an invite code to this email address.
+        </p>
+        <Link 
+          href="/"
+          className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-full font-bold hover:scale-105 active:scale-95 transition-transform"
+        >
+          Return to Homepage
+        </Link>
+      </div>
+    );
+  }
 
   const firstName = residentInfo?.first_name || "your loved one";
   const initial = firstName.charAt(0);
