@@ -28,7 +28,9 @@ function AuthCallbackInner() {
         if (code) {
           step = "Exchanging code...";
           const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeErr) {
+          // If the error is about a missing PKCE verifier, it usually means the 
+          // Supabase background client ALREADY successfully exchanged it a millisecond ago!
+          if (exchangeErr && !exchangeErr.message.includes("PKCE") && (exchangeErr as any).code !== "pkce_code_verifier_not_found") {
              setDebugInfo({ exchangeErr });
              throw exchangeErr;
           }
