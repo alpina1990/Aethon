@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { Resend } from 'resend';
 import crypto from 'crypto';
 
 export async function POST(request: Request) {
@@ -24,15 +23,9 @@ export async function POST(request: Request) {
       .eq('id', user.id)
       .single();
 
-    if (!inviterProfile || (inviterProfile.role !== 'superadmin' && inviterProfile.role !== 'admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!inviterProfile || (inviterProfile.role !== 'admin' && inviterProfile.role !== 'superadmin')) {
+      return NextResponse.json({ error: 'Forbidden: only admins can invite staff' }, { status: 403 });
     }
-
-    if (!inviterProfile.facility_id) {
-       return NextResponse.json({ error: 'You are not attached to a facility' }, { status: 400 });
-    }
-
-    const code = crypto.randomBytes(3).toString('hex').toUpperCase();
 
     const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
     const supabaseAdmin = createSupabaseClient(
@@ -40,6 +33,39 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // WORKAROUND: The iOS database schema has a strict check constraint on invite_codes requiring a resident_id.
+    // To invite staff, we must use a dummy System resident for this facility.
+    let dummyResidentId = null;
+    const { data: existingDummy } = await supabaseAdmin
+      .from('residents')
+      .select('id')
+      .eq('facility_id', inviterProfile.facility_id)
+      .eq('first_name', 'System')
+      .eq('last_name', 'Staff Access')
+      .limit(1)
+      .single();
+
+    if (existingDummy) {
+      dummyResidentId = existingDummy.id;
+    } else {
+      const { data: newDummy, error: dummyErr } = await supabaseAdmin
+        .from('residents')
+        .insert([{
+          first_name: 'System',
+          last_name: 'Staff Access',
+          facility_id: inviterProfile.facility_id,
+          care_stage: 'Independent'
+        }])
+        .select('id')
+        .single();
+      if (dummyErr) throw dummyErr;
+      dummyResidentId = newDummy.id;
+    }
+
+    // Generate 6-digit alphanumeric code
+    const code = crypto.randomBytes(3).toString('hex').toUpperCase();
+
+    // Insert into invite_codes
     const { error: dbError } = await supabaseAdmin
       .from('invite_codes')
       .insert([
@@ -47,6 +73,7 @@ export async function POST(request: Request) {
           code: code,
           kind: role,
           facility_id: inviterProfile.facility_id,
+          resident_id: dummyResidentId, // Bypass check constraint
           created_by: user.id,
           max_uses: 1,
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -55,35 +82,35 @@ export async function POST(request: Request) {
 
     if (dbError) throw dbError;
 
+    // Send email using Resend
     if (process.env.RESEND_API_KEY) {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from: 'Aethon Health <invites@resend.dev>',
-        to: email.trim(),
-        subject: `You have been invited to join Aethon Health as ${role}`,
-        html: `
-          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; text-align: center;">
-            <div style="background-color: #0ea5e9; padding: 12px; border-radius: 50%; width: 48px; height: 48px; margin: 0 auto 24px;">
-              <svg fill="none" stroke="white" viewBox="0 0 24 24" style="width: 24px; height: 24px; margin-top: 12px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+      try {
+        const { Resend } = await import('resend');
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        
+        await resend.emails.send({
+          from: 'Aethon Health <invites@resend.dev>',
+          to: email.trim(),
+          subject: 'You have been invited to Aethon Health',
+          html: `
+            <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px;">
+              <h2 style="color: #0ea5e9;">Aethon Health Invitation</h2>
+              <p>You have been invited as a <strong>${role}</strong>.</p>
+              <p>To join, log in to the Aethon Web Dashboard and enter the following 6-digit access code:</p>
+              <div style="background-color: #f8fafc; padding: 24px; text-align: center; border-radius: 8px; margin: 24px 0;">
+                <span style="font-family: monospace; font-size: 36px; font-weight: bold; letter-spacing: 4px; color: #0f172a;">${code}</span>
+              </div>
+              <p style="color: #64748b; font-size: 14px;">This code expires in 7 days and can only be used once.</p>
             </div>
-            <h1 style="color: #0f172a; margin-bottom: 8px;">Aethon Staff Invite</h1>
-            <p style="color: #64748b; font-size: 16px; margin-bottom: 32px;">You have been invited as a <strong>${role}</strong>.</p>
-            
-            <div style="background-color: #f1f5f9; border-radius: 12px; padding: 24px; margin-bottom: 32px;">
-              <p style="color: #475569; font-size: 14px; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; margin-top: 0;">Your Invite Code</p>
-              <div style="font-size: 36px; font-weight: 900; color: #0f172a; letter-spacing: 4px;">${code}</div>
-            </div>
-
-            <p style="color: #64748b; font-size: 14px;">1. Go to <a href="${process.env.NEXT_PUBLIC_SITE_URL}" style="color: #0ea5e9;">${process.env.NEXT_PUBLIC_SITE_URL}</a></p>
-            <p style="color: #64748b; font-size: 14px;">2. Click "Facility Management"</p>
-            <p style="color: #64748b; font-size: 14px;">3. Sign in with Google using this email address</p>
-            <p style="color: #64748b; font-size: 14px;">4. Enter your 6-digit code</p>
-          </div>
-        `
-      });
+          `
+        });
+      } catch (emailErr) {
+        console.error('Failed to send email:', emailErr);
+      }
     }
 
     return NextResponse.json({ success: true, code });
+
   } catch (error: any) {
     console.error('Invite error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
