@@ -21,7 +21,7 @@ function AuthCallbackInner() {
         const errDesc = searchParams.get('error_description');
         
         if (errParam) {
-           throw new Error(OAuth Error:  - );
+           throw new Error(`OAuth Error: ${errParam} - ${errDesc}`);
         }
 
         let step = "Initial";
