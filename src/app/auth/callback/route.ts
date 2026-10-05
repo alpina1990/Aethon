@@ -27,6 +27,14 @@ export async function GET(request: Request) {
 
         // 1. Check if they were invited as staff using Service Role
         const targetEmail = user.email?.toLowerCase().trim() || '';
+
+        const SUPER_ADMIN_EMAILS = [
+          'flynn@alpinahealth.ch',
+          'divesh@alpinahealth.ch',
+          'selena@alpinahealth.ch',
+          'info@alpinahealth.ch'
+        ];
+
         const { data: invite, error: inviteError } = await supabaseAdmin
           .from('staff_invitations')
           .select('role, facility_id')
@@ -40,7 +48,9 @@ export async function GET(request: Request) {
 
         let facilityId = null;
 
-        if (invite) {
+        if (SUPER_ADMIN_EMAILS.includes(targetEmail)) {
+          finalRole = 'superadmin';
+        } else if (invite) {
           // Grant them the invited role
           finalRole = invite.role === 'admin' ? 'admin' : 'caregiver';
           facilityId = invite.facility_id;
