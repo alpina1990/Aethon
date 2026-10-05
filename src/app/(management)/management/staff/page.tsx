@@ -100,7 +100,7 @@ export default function StaffPage() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
+    <main className="p-4 md:p-6 lg:p-10 space-y-6 md:space-y-8 max-w-[1200px] mx-auto w-full pb-20 lg:pb-32 animate-fade-in">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Staff & Caregivers</h2>
@@ -417,4 +417,6 @@ export default function StaffPage() {
     </div>
   );
 }
+
+
 
