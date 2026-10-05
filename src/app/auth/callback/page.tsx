@@ -10,20 +10,46 @@ function AuthCallbackInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const syncSession = async () => {
       try {
         const supabase = createClient();
         
-        // This handles both ?code= (PKCE) and #access_token= (Implicit)
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // 1. If Supabase sent a PKCE code, we must explicitly exchange it
+        const code = searchParams.get('code');
+        if (code) {
+          const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeErr) throw exchangeErr;
+        }
+
+        // 2. Fetch the session. If it's an implicit flow (#access_token), 
+        // Supabase might take a split second to parse it.
+        let { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (sessionError || !session) {
-          throw new Error(sessionError?.message || "No active session found. Please try logging in again.");
+        if (!session) {
+          // Wait briefly for the auth state listener to catch the hash fragment
+          session = await new Promise((resolve) => {
+            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+              if (newSession) {
+                subscription.unsubscribe();
+                resolve(newSession);
+              }
+            });
+            // Timeout after 2.5 seconds
+            setTimeout(() => {
+              subscription.unsubscribe();
+              resolve(null);
+            }, 2500);
+          });
+        }
+
+        if (!session) {
+          throw new Error("No active session found. Please try logging in again.");
         }
 
         const role = searchParams.get('role') || 'family';
 
-        // Call our secure backend to sync the profile (superadmin, staff invites, etc)
+        // 3. Call our secure backend to sync the profile (superadmin, staff invites, etc)
         const res = await fetch('/api/auth/sync-profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -38,14 +64,17 @@ function AuthCallbackInner() {
         const { redirectUrl } = await res.json();
         
         // Redirect to the correct dashboard
-        router.push(redirectUrl);
+        if (isMounted) {
+          router.push(redirectUrl);
+        }
       } catch (err: any) {
         console.error("Callback error:", err);
-        setError(err.message);
+        if (isMounted) setError(err.message);
       }
     };
 
     syncSession();
+    return () => { isMounted = false; };
   }, [router, searchParams]);
 
   if (error) {
