@@ -12,8 +12,8 @@ export async function POST(request: Request) {
 
     const { code, residentId } = await request.json();
 
-    if (!code || !residentId) {
-      return NextResponse.json({ error: 'Code and residentId are required' }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: 'Code is required' }, { status: 400 });
     }
 
     // Verify the user is an admin or superadmin
@@ -27,18 +27,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Delete using service role to bypass RLS
     const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
     const supabaseAdmin = createSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { error } = await supabaseAdmin
-      .from('invite_codes')
-      .delete()
-      .eq('code', code)
-      .eq('resident_id', residentId);
+    let query = supabaseAdmin.from('invite_codes').delete().eq('code', code);
+    
+    // Only enforce residentId matching if it's explicitly provided and valid
+    if (residentId && residentId !== '00000000-0000-0000-0000-000000000000') {
+      query = query.eq('resident_id', residentId);
+    }
+
+    const { error } = await query;
 
     if (error) throw error;
 
