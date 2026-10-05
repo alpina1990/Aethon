@@ -12,6 +12,13 @@ import { ResidentChat } from "@/components/management/ResidentChat";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+const formatCareStage = (stage?: string) => {
+  if (!stage) return 'New Client';
+  return stage
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase());
+};
+
 export default function ClientProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -151,7 +158,7 @@ export default function ClientProfilePage() {
       await supabase.from('visit_notes').insert([{
         resident_id: residentId,
         visit_type: 'Direct Note',
-        tasks_completed: newNote.trim(),
+        notes: newNote.trim(), tasks_completed: newNote.trim(),
         is_escalation: false,
         facility_id: resident.facility_id
       }]);
@@ -776,7 +783,7 @@ export default function ClientProfilePage() {
                       <p className={`text-xs md:text-sm font-medium leading-relaxed mt-2 ${
                         item.type === 'escalation' ? 'text-rose-700 dark:text-rose-400 font-semibold' : 'text-slate-600 dark:text-slate-400'
                       }`}>
-                        {item.type === 'escalation' ? item.reason : item.tasks_completed}
+                        {item.type === 'escalation' ? item.reason : (item.notes || item.tasks_completed)}
                       </p>
                       
                       {item.type === 'escalation' && item.is_resolved && (
@@ -1126,3 +1133,5 @@ export default function ClientProfilePage() {
     </>
   );
 }
+
+
