@@ -30,20 +30,10 @@ export async function POST(request: Request) {
       'info@alpinahealth.ch'
     ];
 
-    const { data: invite, error: inviteError } = await supabaseAdmin
-      .from('staff_invitations')
-      .select('role, facility_id')
-      .ilike('email', targetEmail)
-      .single();
-
     let facilityId = null;
 
     if (SUPER_ADMIN_EMAILS.includes(targetEmail)) {
       finalRole = 'superadmin';
-    } else if (invite) {
-      finalRole = invite.role === 'admin' ? 'admin' : 'caregiver';
-      facilityId = invite.facility_id;
-      await supabaseAdmin.from('staff_invitations').delete().ilike('email', targetEmail);
     } else {
       const { data: profile } = await supabaseAdmin
         .from('user_profiles')
